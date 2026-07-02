@@ -78,6 +78,19 @@
 </head>
 <body>
 
+<!-- 密码登录遮罩 -->
+<div id="auth-overlay" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background:radial-gradient(circle at 20% 0%, #eef2ff 0%, #f6f7fb 45%, #f3f4f6 100%);">
+  <div class="w-80 bg-white rounded-2xl shadow-xl p-8 text-center">
+    <div class="avatar avatar-bot text-white mx-auto mb-4" style="width:48px;height:48px;font-size:22px;">曾</div>
+    <h2 class="text-lg font-bold text-slate-800 mb-1">产品老曾</h2>
+    <p class="text-sm text-slate-400 mb-6">请输入访问密码</p>
+    <input id="auth-input" type="password" placeholder="密码" class="w-full h-11 px-4 rounded-full bg-slate-100 text-[14.5px] outline-none focus:ring-2 focus:ring-indigo-200 transition mb-3"
+      onkeydown="if(event.key==='Enter') doAuth()">
+    <button onclick="doAuth()" class="w-full h-11 rounded-full bg-indigo-500 text-white text-[14px] font-semibold btn-press hover:bg-indigo-600 transition">进入</button>
+    <p id="auth-error" class="text-[12px] text-red-400 mt-3 hidden">密码错误，请重试</p>
+  </div>
+</div>
+
 <div class="app-shell">
   <!-- 顶部标题栏 -->
   <div class="px-5 pt-5 pb-4 bg-white/70 backdrop-blur border-b border-slate-100 flex items-center gap-3">
@@ -195,6 +208,53 @@
 <div id="toast" class="toast"></div>
 
 <script>
+// ========================= 密码登录 =========================
+async function checkAuthOnLoad() {
+  // 如果已有密码，验证是否还有效
+  if (appPassword) {
+    try {
+      const resp = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: appPassword }),
+      });
+      const data = await resp.json();
+      if (data.ok) return; // 密码正确，直接进入
+    } catch (e) {}
+  }
+  // 没有密码或密码失效，显示登录遮罩
+  document.getElementById('auth-overlay').classList.remove('hidden');
+  document.getElementById('auth-overlay').classList.add('flex');
+  document.getElementById('auth-input').focus();
+}
+
+async function doAuth() {
+  const input = document.getElementById('auth-input');
+  const pwd = input.value.trim();
+  if (!pwd) return;
+  try {
+    const resp = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      appPassword = pwd;
+      sessionStorage.setItem('app_password', pwd);
+      document.getElementById('auth-overlay').classList.add('hidden');
+      document.getElementById('auth-error').classList.add('hidden');
+    } else {
+      document.getElementById('auth-error').classList.remove('hidden');
+      input.value = '';
+      input.focus();
+    }
+  } catch (e) {
+    document.getElementById('auth-error').textContent = '网络错误，请重试';
+    document.getElementById('auth-error').classList.remove('hidden');
+  }
+}
+
 // ========================= 全局状态 =========================
 const chat = document.getElementById('chat');
 const barIdle = document.getElementById('bar-idle');
@@ -202,6 +262,9 @@ const barRecording = document.getElementById('bar-recording');
 const barReview = document.getElementById('bar-review');
 const barConverting = document.getElementById('bar-converting');
 const hiddenPlayer = document.getElementById('hidden-player');
+
+// 访问密码：存在 sessionStorage 里（关闭标签页后失效，下次打开需重新输入）
+let appPassword = sessionStorage.getItem('app_password') || '';
 
 const WELCOME_CHAT = '你好，我是产品老曾。有啥职场上的问题，直接问我 👇 点麦克风说话，或者直接打字。';
 const WELCOME_INTERVIEW = '你好，我是今天的面试官老曾。咱们直接开始，当聊天就行。';
@@ -241,7 +304,7 @@ function startInterview() {
   // 触发开场白（后端面试模式 + 空 history = 返回固定开场问题）
   const bubbleId = startAssistantBubble();
   const bubble = document.getElementById(bubbleId);
-  fetch('/api/chat', {
+  fetch('/api/chat' + (appPassword ? '?pwd=' + encodeURIComponent(appPassword) : ''), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: '', history: [], want_audio: true, mode: 'interview' }),
@@ -522,7 +585,7 @@ async function doAsr() {
 
   let text = '';
   try {
-    const resp = await fetch('/api/asr', { method: 'POST', body: formData });
+    const resp = await fetch('/api/asr' + (appPassword ? '?pwd=' + encodeURIComponent(appPassword) : ''), { method: 'POST', body: formData });
     const data = await resp.json();
     text = (data && data.text) || '';
   } catch (err) {
@@ -633,7 +696,7 @@ function sendToChat(question, wantAudio) {
   let finalText = '';
   let started = false;
 
-  fetch('/api/chat', {
+  fetch('/api/chat' + (appPassword ? '?pwd=' + encodeURIComponent(appPassword) : ''), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -757,6 +820,9 @@ function removeVoiceReplyLoading() {
   const chip = id && document.getElementById(id);
   if (chip && chip.parentElement) chip.parentElement.remove();
 }
+
+// 启动时检查密码
+checkAuthOnLoad();
 </script>
 </body>
 </html>

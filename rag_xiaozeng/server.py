@@ -44,6 +44,10 @@ app = FastAPI(title="小老曾")
 # 上传录音大小上限（防止恶意超大文件占满内存/磁盘）
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20MB 足够覆盖几分钟的 16kHz wav 语音
 
+# 访问密码：从环境变量读取，不知道密码的人无法调用 /api/* 接口
+# 留空则不启用密码（本地开发时方便）
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "").strip()
+
 # TTS 语音缓存目录：同一段文本只合成一次，后续直接返回缓存的 wav
 # 面试开场白等固定文本收益最大（首次 ~6s → 后续 <0.1s）
 TTS_CACHE_DIR = Path(__file__).parent / "tts_cache"
@@ -128,6 +132,33 @@ async def index():
     return FileResponse(STATIC_DIR / "index.html")
 
 
+def _check_password(request: Request) -> bool:
+    """校验请求头里的密码是否正确，没配密码则直接放行"""
+    if not APP_PASSWORD:
+        return True
+    # 优先从 Authorization header 读，兼容 query param（前端 SSE 用 fetch 无法自定义 header）
+    auth = request.headers.get("Authorization", "")
+    pwd_query = request.query_params.get("pwd", "")
+    if auth == f"Bearer {APP_PASSWORD}" or pwd_query == APP_PASSWORD:
+        return True
+    return False
+
+
+@app.post("/api/auth")
+async def api_auth(request: Request):
+    """验证密码是否正确，前端用这个接口做登录校验"""
+    if not APP_PASSWORD:
+        return {"ok": True, "no_password": True}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    pwd = body.get("password", "")
+    if pwd == APP_PASSWORD:
+        return {"ok": True}
+    return JSONResponse({"ok": False, "error": "密码错误"}, status_code=401)
+
+
 @app.get("/api/tts/{audio_key}")
 async def api_tts(audio_key: str):
     """返回缓存的 TTS 音频文件。
@@ -144,9 +175,11 @@ async def api_tts(audio_key: str):
 
 
 @app.post("/api/asr")
-async def api_asr(file: UploadFile = File(...)):
+async def api_asr(request: Request, file: UploadFile = File(...)):
     """接收前端本地转好的 wav 录音，转写为文字。
     用完即删临时文件，不在磁盘上长期保留用户语音。"""
+    if not _check_password(request):
+        return JSONResponse({"error": "密码错误"}, status_code=401)
     content = await file.read()
     if len(content) > MAX_UPLOAD_BYTES:
         return JSONResponse({"text": "", "error": "录音文件过大"}, status_code=400)
@@ -208,6 +241,12 @@ async def api_chat(request: Request):
         body = await request.json()
     except Exception:
         body = {}
+    if not _check_password(request):
+        # SSE 返回错误事件而不是 JSON，前端能统一处理
+        def _auth_error():
+            yield _sse({"type": "error", "message": "密码错误"})
+            yield _sse({"type": "done"})
+        return StreamingResponse(_auth_error(), media_type="text/event-stream")
     message = (body.get("message") or "").strip()
     history = _clean_history(body.get("history"))
     want_audio = bool(body.get("want_audio"))
