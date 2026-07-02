@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>产品老曾</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif; }
+  html, body {
+    background: radial-gradient(circle at 20% 0%, #eef2ff 0%, #f6f7fb 45%, #f3f4f6 100%);
+    height: 100%; margin: 0;
+  }
+  .app-shell {
+    width: 480px; max-width: 100%;
+    background: #fafafc;
+    height: 100vh; height: 100dvh;
+    display: flex; flex-direction: column;
+    margin: 0 auto;
+    box-shadow: 0 0 40px -10px rgba(30,41,59,0.12);
+  }
+  .chat-scroll { scrollbar-width: thin; scrollbar-color: #d8dae3 transparent; }
+  .chat-scroll::-webkit-scrollbar { width: 5px; }
+  .chat-scroll::-webkit-scrollbar-thumb { background: #d8dae3; border-radius: 10px; }
+
+  .bubble-bot {
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.06), 0 8px 20px -12px rgba(15,23,42,0.08);
+    border-radius: 4px 18px 18px 18px;
+  }
+  .bubble-user {
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: #fff;
+    border-radius: 18px 4px 18px 18px;
+    box-shadow: 0 6px 16px -6px rgba(79,70,229,0.5);
+  }
+  .bubble-src { background: #f1f2f6; border-radius: 14px; }
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  }
+  .avatar-bot { background: linear-gradient(135deg,#fbbf24,#f59e0b); }
+  .avatar-user { background: linear-gradient(135deg,#818cf8,#6366f1); }
+
+  @keyframes bounce-dot { 0%,80%,100%{transform:scale(0.6);opacity:.4} 40%{transform:scale(1);opacity:1} }
+  .dot { width:6px;height:6px;border-radius:50%;background:#9ca3af;display:inline-block;animation:bounce-dot 1.2s infinite ease-in-out; }
+  .dot:nth-child(2){animation-delay:.15s} .dot:nth-child(3){animation-delay:.3s}
+
+  .cursor-blink::after {
+    content:'▌'; display:inline-block; margin-left:1px; color:#6366f1;
+    animation: blink 0.9s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity:0; } }
+
+  @keyframes pulse-rec { 0%,100%{ box-shadow:0 0 0 0 rgba(239,68,68,.45);} 50%{ box-shadow:0 0 0 8px rgba(239,68,68,0);} }
+  .rec-dot { animation: pulse-rec 1.4s infinite; }
+
+  @keyframes wave { 0%,100%{ transform: scaleY(0.4);} 50%{ transform: scaleY(1);} }
+  .wave-bar { width:3px; border-radius:2px; background:#a5b4fc; animation: wave 1s infinite ease-in-out; display:inline-block; }
+  .bubble-user .wave-bar { background: rgba(255,255,255,.85); }
+
+  .fade-in { animation: fadeIn .35s ease both; }
+  @keyframes fadeIn { from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+
+  .btn-press:active { transform: scale(0.94); }
+
+  .toast {
+    position:fixed; top:16px; left:50%; transform:translateX(-50%) translateY(-20px);
+    background:#111827; color:#fff; padding:9px 16px; border-radius:10px; font-size:13px;
+    box-shadow:0 8px 20px -6px rgba(0,0,0,.35); opacity:0; transition:all .3s; z-index:999; pointer-events:none;
+    max-width: 90%; text-align: center;
+  }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <!-- 顶部标题栏 -->
+  <div class="px-5 pt-5 pb-4 bg-white/70 backdrop-blur border-b border-slate-100 flex items-center gap-3">
+    <div class="avatar avatar-bot text-white">曾</div>
+    <div class="flex-1">
+      <p class="font-semibold text-slate-800 text-[15px] leading-tight">产品老曾</p>
+      <p id="header-sub" class="text-[12px] text-slate-400 leading-tight mt-0.5 flex items-center gap-1">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+        用老曾自己的声音回答你
+      </p>
+    </div>
+    <button id="btn-interview" onclick="toggleInterview()" class="text-[12px] px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-500 font-medium hover:bg-indigo-100 transition btn-press shrink-0">
+      模拟面试
+    </button>
+    <button id="btn-export" onclick="exportConversation()" class="text-[12px] px-2.5 py-1.5 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition btn-press shrink-0" title="导出本场对话">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+    </button>
+  </div>
+
+  <!-- 聊天区 -->
+  <div id="chat" class="chat-scroll flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-gradient-to-b from-slate-50 to-white">
+    <div class="flex items-start gap-2 fade-in">
+      <div class="avatar avatar-bot text-white text-sm">曾</div>
+      <div class="bubble-bot px-4 py-2.5 text-[14.5px] leading-relaxed text-slate-700 max-w-[78%]">
+        你好，我是产品老曾。有啥职场上的问题，直接问我 👇 点麦克风说话，或者直接打字。
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部输入区：永久存在，四态切换（idle / recording / converting / review） -->
+  <div class="border-t border-slate-100 bg-white px-3 pt-3 pb-4">
+
+    <!-- 录音中 提示条 -->
+    <div id="bar-recording" class="hidden items-center gap-3 bg-red-50 rounded-2xl px-4 py-3 mb-2">
+      <span class="w-2.5 h-2.5 rounded-full bg-red-500 rec-dot"></span>
+      <span id="rec-timer" class="text-red-500 font-semibold text-sm tabular-nums">00:00</span>
+      <div class="flex-1 flex items-center gap-[3px] h-6 justify-center overflow-hidden">
+        <span class="wave-bar h-2" style="background:#f87171;animation-delay:.0s"></span>
+        <span class="wave-bar h-4" style="background:#f87171;animation-delay:.1s"></span>
+        <span class="wave-bar h-5" style="background:#f87171;animation-delay:.2s"></span>
+        <span class="wave-bar h-3" style="background:#f87171;animation-delay:.3s"></span>
+        <span class="wave-bar h-5" style="background:#f87171;animation-delay:.15s"></span>
+        <span class="wave-bar h-2" style="background:#f87171;animation-delay:.25s"></span>
+      </div>
+      <button onclick="stopRecording()" class="text-[12px] text-red-500 font-semibold px-2 py-1 rounded-lg hover:bg-red-100 transition btn-press">点击结束</button>
+    </div>
+
+    <!-- 录完待确认：回听/删除重录 + 转写文字可编辑 + 两种发送方式 -->
+    <div id="bar-review" class="hidden flex-col gap-2 bg-indigo-50 rounded-2xl px-3 py-2.5 mb-2">
+      <div class="flex items-center gap-2">
+        <button onclick="playPreview()" class="w-9 h-9 rounded-full bg-white shadow flex items-center justify-center text-indigo-500 btn-press shrink-0">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 ml-0.5"><path d="M8 5.14v13.72a1 1 0 001.5.87l11-6.86a1 1 0 000-1.74l-11-6.86A1 1 0 008 5.14z"/></svg>
+        </button>
+        <div class="flex-1 flex items-center gap-[3px] h-6">
+          <span class="wave-bar h-3" style="background:#818cf8"></span>
+          <span class="wave-bar h-5" style="background:#818cf8"></span>
+          <span class="wave-bar h-2" style="background:#818cf8"></span>
+          <span class="wave-bar h-4" style="background:#818cf8"></span>
+          <span class="wave-bar h-5" style="background:#818cf8"></span>
+          <span class="wave-bar h-3" style="background:#818cf8"></span>
+          <span class="wave-bar h-2" style="background:#818cf8"></span>
+        </div>
+        <span id="review-duration" class="text-[12px] text-indigo-400 tabular-nums shrink-0">0"</span>
+        <button onclick="cancelReview()" title="删除重录" class="w-9 h-9 rounded-full bg-white shadow flex items-center justify-center text-slate-400 hover:text-red-500 btn-press shrink-0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2"/><path d="M19 6l-1 14a1 1 0 01-1 1H7a1 1 0 01-1-1L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>
+        </button>
+      </div>
+
+      <div id="asr-preview-wrap" class="flex items-center gap-2 pl-1">
+        <span id="asr-preview-icon" class="text-[12px] text-indigo-400">🎧 转写中…</span>
+      </div>
+
+      <div id="asr-result-wrap" class="hidden flex-col gap-2">
+        <input id="asr-text-input" type="text"
+          class="w-full h-9 px-3 rounded-full bg-white text-[13.5px] outline-none focus:ring-2 focus:ring-indigo-200 transition"
+          placeholder="识别结果，可编辑纠错…">
+        <div class="flex items-center gap-2 justify-end">
+          <button onclick="confirmSendVoice('voice')" class="flex items-center gap-1.5 pl-3 pr-4 h-9 rounded-full bg-white text-indigo-500 text-[13px] font-medium shadow btn-press shrink-0">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/></svg>
+            发原声
+          </button>
+          <button onclick="confirmSendVoice('text')" class="flex items-center gap-1.5 pl-3 pr-4 h-9 rounded-full bg-indigo-500 text-white text-[13px] font-semibold shadow btn-press shrink-0">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+            发文字
+          </button>
+        </div>
+      </div>
+
+      <div id="asr-fail-wrap" class="hidden items-center justify-between gap-2 pl-1">
+        <span class="text-[12px] text-amber-500">⚠️ 没听清，可直接发语音</span>
+        <button onclick="confirmSendVoice('voice')" class="px-4 h-9 rounded-full bg-indigo-500 text-white text-[13px] font-semibold shadow btn-press shrink-0">发语音</button>
+      </div>
+    </div>
+
+    <!-- 常态：麦克风 + 文本框 + 发送 -->
+    <div id="bar-idle" class="flex items-center gap-2">
+      <button id="mic-btn" onclick="startRecording()" class="w-11 h-11 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center shrink-0 btn-press hover:bg-indigo-100 transition">
+        <svg viewBox="0 0 24 24" fill="currentColor" class="w-[18px] h-[18px]"><path d="M12 15a3 3 0 003-3V6a3 3 0 10-6 0v6a3 3 0 003 3z"/><path d="M19 11a7 7 0 01-14 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <input id="text-input" type="text" placeholder="也可以打字问老曾…"
+        class="flex-1 h-11 px-4 rounded-full bg-slate-100 text-[14.5px] outline-none focus:ring-2 focus:ring-indigo-200 transition"
+        onkeydown="if(event.key==='Enter') sendText()">
+      <button onclick="sendText()" class="h-11 px-4 rounded-full bg-indigo-500 text-white text-[13.5px] font-semibold shrink-0 btn-press hover:bg-indigo-600 transition">发送</button>
+    </div>
+
+    <!-- 停止录音的"处理中"过渡态 -->
+    <div id="bar-converting" class="hidden items-center gap-2 justify-center h-11 text-[13px] text-slate-400">
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="ml-1">处理中…</span>
+    </div>
+  </div>
+</div>
+
+<audio id="hidden-player" class="hidden"></audio>
+<div id="toast" class="toast"></div>
+
+<script>
+// ========================= 全局状态 =========================
+const chat = document.getElementById('chat');
+const barIdle = document.getElementById('bar-idle');
+const barRecording = document.getElementById('bar-recording');
+const barReview = document.getElementById('bar-review');
+const barConverting = document.getElementById('bar-converting');
+const hiddenPlayer = document.getElementById('hidden-player');
+
+const WELCOME_CHAT = '你好，我是产品老曾。有啥职场上的问题，直接问我 👇 点麦克风说话，或者直接打字。';
+const WELCOME_INTERVIEW = '你好，我是今天的面试官老曾。咱们直接开始，当聊天就行。';
+
+let currentMode = 'chat'; // 'chat' | 'interview'
+let chatHistory = [
+  { role: 'assistant', content: WELCOME_CHAT }
+];
+
+let mediaRecorder = null;
+let mediaStream = null;
+let recChunks = [];
+let recSeconds = 0;
+let recTimerHandle = null;
+let recordedWavBlob = null;   // 转好格式的 wav，用于上传 ASR / 发原声
+let recordedBlobUrl = null;   // 用于本地回听
+
+// ========================= 面试模式切换 =========================
+function toggleInterview() {
+  if (currentMode === 'chat') startInterview();
+  else endInterview();
+}
+
+function startInterview() {
+  currentMode = 'interview';
+  // 清空历史，切换为面试开场
+  chatHistory = [{ role: 'assistant', content: WELCOME_INTERVIEW }];
+  // 重新渲染聊天区
+  chat.innerHTML = '';
+  // 改顶部状态文字 + 按钮文案
+  document.getElementById('header-sub').innerHTML =
+    '<span class="w-1.5 h-1.5 rounded-full bg-red-400 inline-block"></span> 模拟面试进行中';
+  const btn = document.getElementById('btn-interview');
+  btn.textContent = '结束面试';
+  btn.className = 'text-[12px] px-3 py-1.5 rounded-full bg-red-50 text-red-500 font-medium hover:bg-red-100 transition btn-press shrink-0';
+
+  // 触发开场白（后端面试模式 + 空 history = 返回固定开场问题）
+  const bubbleId = startAssistantBubble();
+  const bubble = document.getElementById(bubbleId);
+  fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: '', history: [], want_audio: true, mode: 'interview' }),
+  }).then(resp => {
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buf = '';
+
+    function processBuf() {
+      const parts = buf.split('\n\n');
+      buf = parts.pop();
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith('data:')) continue;
+        let evt;
+        try { evt = JSON.parse(line.slice(5).trim()); } catch (e) { continue; }
+        if (evt.type === 'answer' && bubble) {
+          bubble.innerHTML = renderAnswerText(evt.text) + '<span class="cursor-blink"></span>';
+          scrollBottom();
+        } else if (evt.type === 'tts_start') {
+          appendVoiceReplyLoading();
+        } else if (evt.type === 'tts_ready') {
+          fillVoiceReply(evt.audio_key);
+        } else if (evt.type === 'tts_failed') {
+          removeVoiceReplyLoading();
+        } else if (evt.type === 'done' && bubble) {
+          bubble.innerHTML = renderAnswerText(bubble.textContent);
+          chatHistory.push({ role: 'assistant', content: bubble.textContent });
+        }
+      }
+    }
+
+    function pump() {
+      return reader.read().then(({ done, value }) => {
+        if (done) {
+          buf += decoder.decode();
+          if (buf.trim()) processBuf();
+          return;
+        }
+        buf += decoder.decode(value, { stream: true });
+        processBuf();
+        return pump();
+      });
+    }
+    return pump();
+  }).catch(err => {
+    console.error('面试开场白请求失败', err);
+    if (bubble) bubble.innerHTML = '网络异常，请重试';
+  });
+}
+
+function endInterview() {
+  currentMode = 'chat';
+  // 恢复顶部状态
+  document.getElementById('header-sub').innerHTML =
+    '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span> 用老曾自己的声音回答你';
+  const btn = document.getElementById('btn-interview');
+  btn.textContent = '模拟面试';
+  btn.className = 'text-[12px] px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-500 font-medium hover:bg-indigo-100 transition btn-press shrink-0';
+  // 在聊天区追加一条结束提示
+  appendSystemNotice('— 面试结束，可以导出本场对话复盘 —');
+  // 切回问答模式的历史
+  chatHistory = [{ role: 'assistant', content: WELCOME_CHAT }];
+}
+
+function appendSystemNotice(text) {
+  const row = document.createElement('div');
+  row.className = 'flex justify-center fade-in';
+  row.innerHTML = `<span class="text-[11px] text-slate-400 bg-slate-100 px-3 py-1 rounded-full">${escapeHtml(text)}</span>`;
+  chat.appendChild(row);
+  scrollBottom();
+}
+
+// ========================= 整场对话导出 =========================
+function exportConversation() {
+  // 从 DOM 抓取所有消息，比 chatHistory 更可靠（包含语音气泡等非文本内容）
+  const rows = chat.querySelectorAll('div.flex.items-start, div.flex.justify-center');
+  let md = '';
+  const now = new Date();
+  md += `# 产品老曾 · 对话记录\n\n`;
+  md += `> 导出时间：${now.toLocaleString('zh-CN')}\n`;
+  md += `> 模式：${currentMode === 'interview' ? '模拟面试' : '问答'}\n\n`;
+  md += `---\n\n`;
+
+  for (const row of rows) {
+    if (row.classList.contains('justify-center')) {
+      const txt = row.textContent.trim();
+      if (txt) md += `*${txt}*\n\n`;
+      continue;
+    }
+    const isBot = row.querySelector('.avatar-bot');
+    const isUser = row.querySelector('.avatar-user');
+    const bubble = row.querySelector('.bubble-bot, .bubble-user, .bubble-src');
+    if (!bubble) continue;
+    const text = bubble.textContent.trim();
+    if (!text) continue;
+    if (isBot) md += `**老曾：** ${text}\n\n`;
+    else if (isUser) md += `**我：** ${text}\n\n`;
+    else md += `> ${text}\n\n`;
+  }
+
+  // 触发下载
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `老曾对话_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}.md`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('对话已导出');
+}
+
+// ========================= 小工具 =========================
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove('show'), 2600);
+}
+function scrollBottom() { chat.scrollTop = chat.scrollHeight + 200; }
+function escapeHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+// 把 LLM 回答里的 **加粗** 转成 <strong>，其余全部转义，避免 XSS
+function renderAnswerText(text) {
+  const esc = escapeHtml(text || '');
+  return esc.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
+function setBar(state) {
+  barIdle.classList.toggle('hidden', state !== 'idle');
+  barIdle.classList.toggle('flex', state === 'idle');
+  barRecording.classList.toggle('hidden', state !== 'recording');
+  barRecording.classList.toggle('flex', state === 'recording');
+  barReview.classList.toggle('hidden', state !== 'review');
+  barReview.classList.toggle('flex', state === 'review');
+  barConverting.classList.toggle('hidden', state !== 'converting');
+  barConverting.classList.toggle('flex', state === 'converting');
+}
+
+// ========================= 录音：idle -> recording -> converting -> review =========================
+async function startRecording() {
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+    showToast('当前环境不支持录音（需 http://localhost 或 https），可以直接打字');
+    return;
+  }
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
+    });
+  } catch (err) {
+    showToast('无法录音（' + err.message + '），换成打字问老曾吧');
+    return;
+  }
+  let mimeType = 'audio/webm;codecs=opus';
+  if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'audio/webm';
+  if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'audio/ogg;codecs=opus';
+  mediaRecorder = new MediaRecorder(mediaStream, { mimeType });
+  recChunks = [];
+  mediaRecorder.ondataavailable = (ev) => { if (ev.data.size > 0) recChunks.push(ev.data); };
+  mediaRecorder.onstop = onRecorderStopped;
+  mediaRecorder.start();
+
+  recSeconds = 0;
+  document.getElementById('rec-timer').textContent = '00:00';
+  setBar('recording');
+  recTimerHandle = setInterval(() => {
+    recSeconds++;
+    const m = String(Math.floor(recSeconds/60)).padStart(2,'0');
+    const s = String(recSeconds%60).padStart(2,'0');
+    document.getElementById('rec-timer').textContent = `${m}:${s}`;
+    if (recSeconds >= 60) stopRecording(); // 单条录音最长60秒，避免误触长时间占用麦克风
+  }, 1000);
+}
+
+function stopRecording() {
+  clearInterval(recTimerHandle);
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    setBar('converting');
+    mediaRecorder.stop();
+  }
+}
+
+async function onRecorderStopped() {
+  if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+  const mimeType = (mediaRecorder && mediaRecorder.mimeType) || 'audio/webm';
+  const webmBlob = new Blob(recChunks, { type: mimeType.split(';')[0] });
+  try {
+    recordedWavBlob = await webmToWav(webmBlob);
+    if (recordedBlobUrl) URL.revokeObjectURL(recordedBlobUrl);
+    recordedBlobUrl = URL.createObjectURL(recordedWavBlob);
+    document.getElementById('review-duration').textContent = recSeconds + '"';
+    setBar('review');
+    doAsr();
+  } catch (err) {
+    showToast('录音处理失败：' + err.message);
+    setBar('idle');
+  }
+}
+
+function playPreview() {
+  if (!recordedBlobUrl) return;
+  hiddenPlayer.src = recordedBlobUrl;
+  hiddenPlayer.play().catch(() => showToast('播放失败'));
+}
+
+function cancelReview() {
+  if (recordedBlobUrl) { URL.revokeObjectURL(recordedBlobUrl); recordedBlobUrl = null; }
+  recordedWavBlob = null;
+  showToast('已删除，可重新录音');
+  setBar('idle');
+}
+
+// ========================= WebM -> WAV（本地转换，16kHz单声道） =========================
+function audioBufferToWav(buffer) {
+  const numCh = 1;
+  const sampleRate = buffer.sampleRate;
+  const samples = buffer.getChannelData(0);
+  const dataLen = samples.length * 2;
+  const bufferLen = 44 + dataLen;
+  const wav = new ArrayBuffer(bufferLen);
+  const view = new DataView(wav);
+  function writeString(off, s) { for (let i=0;i<s.length;i++) view.setUint8(off+i, s.charCodeAt(i)); }
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataLen, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numCh, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numCh * 2, true);
+  view.setUint16(32, numCh * 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataLen, true);
+  let off = 44;
+  for (let i=0; i<samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    off += 2;
+  }
+  return new Blob([wav], { type: 'audio/wav' });
+}
+
+async function webmToWav(blob) {
+  const TARGET_RATE = 16000;
+  const arrayBuf = await blob.arrayBuffer();
+  const decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const rawBuf = await decodeCtx.decodeAudioData(arrayBuf);
+  const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(
+    1, Math.ceil(rawBuf.duration * TARGET_RATE), TARGET_RATE
+  );
+  const src = offlineCtx.createBufferSource();
+  src.buffer = rawBuf;
+  src.connect(offlineCtx.destination);
+  src.start(0);
+  const resampledBuf = await offlineCtx.startRendering();
+  try { decodeCtx.close(); } catch (e) {}
+  return audioBufferToWav(resampledBuf);
+}
+
+// ========================= ASR：上传录音 -> 转写文字 =========================
+async function doAsr() {
+  document.getElementById('asr-preview-wrap').classList.remove('hidden');
+  document.getElementById('asr-result-wrap').classList.add('hidden');
+  document.getElementById('asr-result-wrap').classList.remove('flex');
+  document.getElementById('asr-fail-wrap').classList.add('hidden');
+  document.getElementById('asr-fail-wrap').classList.remove('flex');
+  document.getElementById('asr-preview-icon').textContent = '🎧 转写中…';
+
+  if (!recordedWavBlob) return;
+  const formData = new FormData();
+  formData.append('file', recordedWavBlob, 'recording.wav');
+
+  let text = '';
+  try {
+    const resp = await fetch('/api/asr', { method: 'POST', body: formData });
+    const data = await resp.json();
+    text = (data && data.text) || '';
+  } catch (err) {
+    console.error('ASR 请求失败', err);
+  }
+
+  document.getElementById('asr-preview-wrap').classList.add('hidden');
+  if (text) {
+    document.getElementById('asr-result-wrap').classList.remove('hidden');
+    document.getElementById('asr-result-wrap').classList.add('flex');
+    document.getElementById('asr-text-input').value = text;
+  } else {
+    document.getElementById('asr-fail-wrap').classList.remove('hidden');
+    document.getElementById('asr-fail-wrap').classList.add('flex');
+  }
+}
+
+// mode: 'text' = 发送识别后的文字（走文字通道，不带语音回复）
+// mode: 'voice' = 保留原声发送（走语音通道，带老曾语音回复）
+function confirmSendVoice(mode) {
+  const duration = recSeconds || 1;
+  const asrText = (document.getElementById('asr-text-input').value || '').trim();
+  const audioUrl = recordedBlobUrl;
+  setBar('idle');
+
+  if (mode === 'text') {
+    if (!asrText) { showToast('没有可发送的文字'); return; }
+    pushUserTextBubble(asrText);
+    recordedWavBlob = null; recordedBlobUrl = null;
+    sendToChat(asrText, false);
+  } else {
+    pushUserVoiceBubble(audioUrl, duration, asrText);
+    const fallbackText = asrText;
+    recordedWavBlob = null; recordedBlobUrl = null;
+    sendToChat(fallbackText, true);
+  }
+}
+
+// ========================= 文本提问 =========================
+function sendText() {
+  const input = document.getElementById('text-input');
+  const val = input.value.trim();
+  if (!val) return;
+  input.value = '';
+  pushUserTextBubble(val);
+  sendToChat(val, false);
+}
+
+// ========================= 消息渲染：用户气泡 =========================
+function pushUserTextBubble(text) {
+  const row = document.createElement('div');
+  row.className = 'flex items-start gap-2 justify-end fade-in';
+  row.innerHTML = `
+    <div class="bubble-user px-4 py-2.5 text-[14.5px] leading-relaxed max-w-[78%]">${escapeHtml(text)}</div>
+    <div class="avatar avatar-user text-white text-sm">我</div>`;
+  chat.appendChild(row);
+  scrollBottom();
+}
+
+function pushUserVoiceBubble(audioUrl, duration, asrText) {
+  const row = document.createElement('div');
+  row.className = 'flex items-start gap-2 justify-end fade-in';
+  const playBtn = audioUrl ? `<button onclick="hiddenPlayer.src='${audioUrl}';hiddenPlayer.play()" class="shrink-0">▶</button>` : '';
+  row.innerHTML = `
+    <div class="bubble-user px-4 py-2.5 max-w-[78%] flex flex-col gap-1.5">
+      <div class="flex items-center gap-[3px] h-5 min-w-[90px]">
+        ${playBtn}
+        ${[3,5,2,4,5,3,2,4].map((h,i)=>`<span class="wave-bar h-${h}" style="animation-delay:${i*0.08}s"></span>`).join('')}
+        <span class="text-[12px] ml-2 opacity-80">${duration}"</span>
+      </div>
+    </div>
+    <div class="avatar avatar-user text-white text-sm">我</div>`;
+  chat.appendChild(row);
+  scrollBottom();
+
+  const asrRow = document.createElement('div');
+  asrRow.className = 'flex items-start gap-2 justify-end fade-in';
+  asrRow.innerHTML = `<div class="text-[12px] text-slate-400 mr-11">📝 ${escapeHtml(asrText || '（听不清）')}</div>`;
+  chat.appendChild(asrRow);
+  scrollBottom();
+}
+
+// ========================= 助手回复：thinking -> 流式打字 -> 来源 -> (语音)配音 =========================
+function startAssistantBubble() {
+  // 创建一个空的老曾气泡（三点loading），返回 bubble 元素的 id
+  const bubbleId = 'bot-bubble-' + Date.now() + '-' + Math.floor(Math.random()*1000);
+  const row = document.createElement('div');
+  row.className = 'flex items-start gap-2 fade-in';
+  row.innerHTML = `<div class="avatar avatar-bot text-white text-sm">曾</div><div id="${bubbleId}" class="bubble-bot px-4 py-2.5 text-[14.5px] leading-relaxed text-slate-700 max-w-[78%]"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
+  chat.appendChild(row);
+  scrollBottom();
+  window._currentBotBubbleId = bubbleId;  // 供开场白逻辑引用
+  return bubbleId;
+}
+
+function sendToChat(question, wantAudio) {
+  if (!question) {
+    // 语音发原声但没有转写文字，仍然给个占位提示
+    question = '（语音提问，未能转写出文字）';
+  }
+  // 面试模式下老曾每次提问都用语音说出来（模拟真实面试官在说话）
+  if (currentMode === 'interview') wantAudio = true;
+  chatHistory.push({ role: 'user', content: question });
+
+  const bubbleId = startAssistantBubble();
+  const bubble = document.getElementById(bubbleId);
+
+  let finalText = '';
+  let started = false;
+
+  fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: question,
+      history: chatHistory.slice(0, -1),
+      want_audio: wantAudio,
+      mode: currentMode,
+    }),
+  }).then(resp => {
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buf = '';
+
+    function processBuf() {
+      const parts = buf.split('\n\n');
+      buf = parts.pop(); // 最后一段可能不完整，留到下一次
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith('data:')) continue;
+        let evt;
+        try { evt = JSON.parse(line.slice(5).trim()); } catch (e) { continue; }
+        handleChatEvent(evt);
+      }
+    }
+
+    function pump() {
+      return reader.read().then(({ done, value }) => {
+        if (done) {
+          // 流结束前，buf 里可能还残留最后一段未处理的数据（没有 \n\n 结尾），
+          // 必须处理掉，否则最后一段文字会丢失——这是"回答读到一半就中断"的根因
+          buf += decoder.decode();
+          if (buf.trim()) processBuf();
+          return;
+        }
+        buf += decoder.decode(value, { stream: true });
+        processBuf();
+        return pump();
+      });
+    }
+
+    function handleChatEvent(evt) {
+      if (evt.type === 'answer') {
+        started = true;
+        finalText = evt.text;
+        bubble.innerHTML = renderAnswerText(finalText) + '<span class="cursor-blink"></span>';
+        scrollBottom();
+      } else if (evt.type === 'sources') {
+        bubble.innerHTML = renderAnswerText(finalText); // 去掉光标
+        appendSourceChip(evt.html);
+      } else if (evt.type === 'tts_start') {
+        appendVoiceReplyLoading();
+      } else if (evt.type === 'tts_ready') {
+        fillVoiceReply(evt.audio_key);
+      } else if (evt.type === 'tts_failed') {
+        removeVoiceReplyLoading();
+      } else if (evt.type === 'error') {
+        if (!started) {
+          bubble.innerHTML = escapeHtml(evt.message || '出错了，再问一次试试？');
+        }
+      } else if (evt.type === 'done') {
+        bubble.innerHTML = renderAnswerText(finalText || bubble.textContent);
+        if (finalText) chatHistory.push({ role: 'assistant', content: finalText });
+      }
+    }
+
+    return pump();
+  }).catch(err => {
+    console.error('chat 请求失败', err);
+    bubble.innerHTML = '网络异常，请重试';
+  });
+}
+
+function appendSourceChip(html) {
+  if (!html) return;
+  const row = document.createElement('div');
+  row.className = 'flex items-start gap-2 fade-in';
+  row.innerHTML = `<div class="avatar" style="visibility:hidden"></div>
+    <div class="bubble-src px-3 py-1.5 text-[11.5px] text-slate-400 max-w-[78%]">${html}</div>`;
+  chat.appendChild(row);
+  scrollBottom();
+}
+
+let _ttsChipCounter = 0;
+function appendVoiceReplyLoading() {
+  _ttsChipCounter++;
+  const id = 'tts-chip-' + _ttsChipCounter;
+  window._lastTtsChipId = id;
+  const row = document.createElement('div');
+  row.className = 'flex items-start gap-2 fade-in';
+  row.innerHTML = `<div class="avatar" style="visibility:hidden"></div>
+    <div id="${id}" class="bubble-src px-3 py-2 text-[12.5px] text-slate-400 flex items-center gap-2">
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span>🔊 配音中…</span>
+    </div>`;
+  chat.appendChild(row);
+  scrollBottom();
+}
+
+function fillVoiceReply(audioKey) {
+  const id = window._lastTtsChipId;
+  const chip = id && document.getElementById(id);
+  if (!chip) return;
+  const audioUrl = `/api/tts/${audioKey}`;
+  const btnId = 'tts-play-' + _ttsChipCounter;
+  chip.className = 'bubble-bot px-3 py-2 flex items-center gap-2';
+  chip.innerHTML = `<button id="${btnId}" onclick="hiddenPlayer.src='${audioUrl}';hiddenPlayer.play()" class="w-8 h-8 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center btn-press">▶</button>
+    <div class="flex items-center gap-[3px] h-5">
+      ${[3,5,2,4,3].map(h=>`<span class="wave-bar h-${h}" style="background:#a5b4fc"></span>`).join('')}
+    </div>
+    <span class="text-[11px] text-slate-400">老曾语音回复</span>`;
+  scrollBottom();
+  // 面试模式自动播放（用户点"模拟面试"按钮已建立交互上下文，浏览器允许自动播放）
+  if (currentMode === 'interview') {
+    const btn = document.getElementById(btnId);
+    if (btn) btn.click();
+  }
+}
+
+function removeVoiceReplyLoading() {
+  const id = window._lastTtsChipId;
+  const chip = id && document.getElementById(id);
+  if (chip && chip.parentElement) chip.parentElement.remove();
+}
+</script>
+</body>
+</html>

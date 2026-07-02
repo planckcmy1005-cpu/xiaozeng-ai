@@ -1,0 +1,182 @@
+<script>
+(function() {
+  var ICON_MIC = '<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 15a3 3 0 003-3V6a3 3 0 10-6 0v6a3 3 0 003 3z"/><path d="M19 11a7 7 0 01-14 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  var ICON_STOP = '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+  var ICON_LOADING = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 3a9 9 0 019 9" style="animation:wxspin 0.8s linear infinite;transform-origin:12px 12px;"/></svg><style>@keyframes wxspin{to{transform:rotate(360deg)}}</style>';
+
+  function audioBufferToWav(buffer) {
+    var numCh = 1;
+    var sampleRate = buffer.sampleRate;
+    var samples = buffer.getChannelData(0);
+    var dataLen = samples.length * 2;
+    var bufferLen = 44 + dataLen;
+    var wav = new ArrayBuffer(bufferLen);
+    var view = new DataView(wav);
+    function writeString(off, s) { for (var i=0;i<s.length;i++) view.setUint8(off+i, s.charCodeAt(i)); }
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + dataLen, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numCh, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numCh * 2, true);
+    view.setUint16(32, numCh * 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, dataLen, true);
+    var off = 44;
+    for (var i=0; i<samples.length; i++) {
+      var s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      off += 2;
+    }
+    return new Blob([wav], {type: 'audio/wav'});
+  }
+
+  async function webmToWav(blob) {
+    var TARGET_RATE = 16000; // ASR模型标准输入采样率
+    var arrayBuf = await blob.arrayBuffer();
+    var decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
+    var rawBuf = await decodeCtx.decodeAudioData(arrayBuf);
+    // 设备原生采样率通常是44100/48000Hz，显式重采样到16kHz，避免走音失真
+    var offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(
+      1, Math.ceil(rawBuf.duration * TARGET_RATE), TARGET_RATE
+    );
+    var src = offlineCtx.createBufferSource();
+    src.buffer = rawBuf;
+    src.connect(offlineCtx.destination);
+    src.start(0);
+    var resampledBuf = await offlineCtx.startRendering();
+    try { decodeCtx.close(); } catch (e) {}
+    return audioBufferToWav(resampledBuf);
+  }
+
+  // 屏幕内提示条，代替可能被 webview/嵌入式预览拦截的原生 alert()
+  function toast(msg, isError) {
+    console.log('[SELF_REC] toast:', msg);
+    var box = document.getElementById('wx-toast');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'wx-toast';
+      box.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:99999;' +
+        'max-width:90%;padding:10px 16px;border-radius:10px;font-size:13px;line-height:1.4;' +
+        'box-shadow:0 8px 20px -6px rgba(0,0,0,.25);text-align:center;transition:opacity .3s;';
+      document.body.appendChild(box);
+    }
+    box.style.background = isError ? '#ef4444' : '#1e1e2e';
+    box.style.color = '#fff';
+    box.textContent = msg;
+    box.style.opacity = '1';
+    box.style.display = 'block';
+    clearTimeout(box._hideTimer);
+    box._hideTimer = setTimeout(function() { box.style.opacity = '0'; }, 3200);
+  }
+
+  function setup() {
+    var btn = document.getElementById('wx-mic');
+    console.log('[SELF_REC] setup() called, btn=', btn);
+    if (!btn) { setTimeout(setup, 200); return; }
+    btn.innerHTML = ICON_MIC;
+
+    // 预检测：当前环境是否具备录音能力（非安全上下文 / 浏览器不支持时提前提示，而不是等点击才报错）
+    var mediaSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    if (!mediaSupported) {
+      console.warn('[SELF_REC] navigator.mediaDevices.getUserMedia 不可用，isSecureContext=', window.isSecureContext, 'protocol=', location.protocol, 'host=', location.hostname);
+      toast('当前浏览器环境不支持录音（需用 http://localhost 或 https 打开，且允许麦克风权限），可以直接打字提问', true);
+    }
+
+    var mediaRecorder = null;
+    var chunks = [];
+    var isRecording = false;
+
+    function setBtnState(state) {
+      // state: 'idle' | 'recording' | 'processing'
+      if (state === 'recording') { btn.innerHTML = ICON_STOP; btn.style.background = '#fee2e2'; btn.style.color = '#ef4444'; }
+      else if (state === 'processing') { btn.innerHTML = ICON_LOADING; btn.style.background = '#eef0ff'; btn.style.color = '#6366f1'; }
+      else { btn.innerHTML = ICON_MIC; btn.style.background = '#eef0ff'; btn.style.color = '#6366f1'; }
+    }
+
+    async function handleMicClick() {
+      console.log('[SELF_REC] handleMicClick called, isRecording=', isRecording);
+      if (!isRecording) {
+        try {
+          var stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, sampleRate: 16000}});
+          var mimeType = 'audio/webm;codecs=opus';
+          if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'audio/webm';
+          if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'audio/ogg;codecs=opus';
+          mediaRecorder = new MediaRecorder(stream, {mimeType: mimeType});
+          chunks = [];
+          mediaRecorder.ondataavailable = function(ev) { if (ev.data.size > 0) chunks.push(ev.data); };
+          mediaRecorder.onstop = async function() {
+            stream.getTracks().forEach(function(t){ t.stop(); });
+            var webmBlob = new Blob(chunks, {type: mimeType.split(';')[0]});
+            try {
+              setBtnState('processing');
+              btn.disabled = true;
+              var wavBlob = await webmToWav(webmBlob);
+              var file = new File([wavBlob], 'recording.wav', {type: 'audio/wav'});
+              var input = document.querySelector('#wx-mic-audio input[type="file"]');
+              if (input) {
+                var dt = new DataTransfer();
+                dt.items.add(file);
+                input.files = dt.files;
+                input.dispatchEvent(new Event('change', {bubbles: true}));
+              } else {
+                console.warn('input not found');
+                toast('内部错误：找不到录音上传入口，请刷新页面重试', true);
+              }
+            } catch (err) {
+              console.error('wav convert failed', err);
+              toast('录音处理失败：' + err.message, true);
+            } finally {
+              btn.disabled = false;
+              isRecording = false;
+              setBtnState('idle');
+            }
+          };
+          mediaRecorder.start();
+          isRecording = true;
+          setBtnState('recording');
+        } catch (err) {
+          console.error('[SELF_REC] getUserMedia failed:', err);
+          toast('无法录音（' + err.message + '），换成打字问老曾吧', true);
+        }
+      } else {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          // 点停止的瞬间立刻给反馈，补掉 webmToWav 本地转换的空窗
+          setBtnState('processing');
+          btn.disabled = true;
+          mediaRecorder.stop();
+        }
+      }
+    }
+
+    btn.addEventListener('click', async function(e) {
+      console.log('[SELF_REC] click event (capture)');
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      await handleMicClick();
+    }, true);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setup);
+  } else {
+    setup();
+  }
+  setTimeout(setup, 500);
+
+  // ===== mic_audio 组件被重置为空后，Gradio 会重新挂载 input[type=file]，
+  // setup() 已经绑定过 #wx-mic 按钮监听（不会重复绑定，因为 btn 是同一个 DOM 节点），
+  // 但保险起见每次 mic_audio 变化后重新确认一次按钮状态和图标 =====
+  var _mo = new MutationObserver(function() {
+    var btn = document.getElementById('wx-mic');
+    if (btn && !btn.innerHTML.trim()) btn.innerHTML = ICON_MIC;
+  });
+  document.addEventListener('DOMContentLoaded', function() {
+    _mo.observe(document.body, {childList: true, subtree: true});
+  });
+})();
+</script>

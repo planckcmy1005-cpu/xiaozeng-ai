@@ -1,0 +1,55 @@
+# === 大文件/可重建产物 ===
+downloads/
+models/
+rag_xiaozeng/chroma_db/
+rag_xiaozeng/tts_cache/
+**/__pycache__/
+*.pyc
+
+# === 密钥/个人配置 ===
+.env
+rag_xiaozeng/voice_id.txt
+douyin_cookie.txt
+rag_xiaozeng/f2_douyin_config.yaml
+rag_xiaozeng/f2_douyin_config.bak
+rag_xiaozeng/.gradio/
+
+# === 日志 ===
+*.log
+logs/
+
+# === 临时文件 ===
+.tmp/
+rag_xiaozeng/.tmp/
+.DS_Store
+
+# === 媒体文件 ===
+*.mp3
+*.wav
+*.webm
+voice_assets/
+
+# === 抖音爬虫/报告生成（非核心功能）===
+douyin_*.json
+douyin_*.db
+extract_cookie.py
+fetch_aweme_ids.py
+f2_douyin_config.yaml
+f2_douyin_config.bak
+generate_categorized_report.py
+generate_report*.py
+github_douyin-distiller/
+
+# === 个人文档/记忆 ===
+.workbuddy/
+MEMORY.md
+产品老曾_*.md
+产品老曾_*.html
+小老曾_*.md
+换环境交接方案.md
+老曾参考音频*.md
+
+# === IDE ===
+.idea/
+.vscode/
+*.zip

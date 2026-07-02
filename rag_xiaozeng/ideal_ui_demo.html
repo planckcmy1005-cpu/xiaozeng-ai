@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小老曾 · 理想态交互 Demo</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif; }
+  body {
+    background: radial-gradient(circle at 20% 0%, #eef2ff 0%, #f6f7fb 45%, #f3f4f6 100%);
+    min-height: 100vh;
+  }
+  .phone {
+    width: 420px;
+    max-width: 100%;
+    background: #fafafc;
+    border-radius: 32px;
+    box-shadow: 0 30px 80px -20px rgba(30,41,59,0.35), 0 0 0 1px rgba(255,255,255,0.6) inset;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 820px;
+  }
+  .chat-scroll { scrollbar-width: thin; scrollbar-color: #d8dae3 transparent; }
+  .chat-scroll::-webkit-scrollbar { width: 5px; }
+  .chat-scroll::-webkit-scrollbar-thumb { background: #d8dae3; border-radius: 10px; }
+
+  .bubble-bot {
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.06), 0 8px 20px -12px rgba(15,23,42,0.08);
+    border-radius: 4px 18px 18px 18px;
+  }
+  .bubble-user {
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: #fff;
+    border-radius: 18px 4px 18px 18px;
+    box-shadow: 0 6px 16px -6px rgba(79,70,229,0.5);
+  }
+  .bubble-src {
+    background: #f1f2f6;
+    border-radius: 14px;
+  }
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  }
+  .avatar-bot { background: linear-gradient(135deg,#fbbf24,#f59e0b); }
+  .avatar-user { background: linear-gradient(135deg,#818cf8,#6366f1); }
+
+  @keyframes bounce-dot { 0%,80%,100%{transform:scale(0.6);opacity:.4} 40%{transform:scale(1);opacity:1} }
+  .dot { width:6px;height:6px;border-radius:50%;background:#9ca3af;display:inline-block;animation:bounce-dot 1.2s infinite ease-in-out; }
+  .dot:nth-child(2){animation-delay:.15s} .dot:nth-child(3){animation-delay:.3s}
+
+  .cursor-blink::after {
+    content:'▌'; display:inline-block; margin-left:1px; color:#6366f1;
+    animation: blink 0.9s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity:0; } }
+
+  @keyframes pulse-rec { 0%,100%{ box-shadow:0 0 0 0 rgba(239,68,68,.45);} 50%{ box-shadow:0 0 0 8px rgba(239,68,68,0);} }
+  .rec-dot { animation: pulse-rec 1.4s infinite; }
+
+  @keyframes wave { 0%,100%{ transform: scaleY(0.4);} 50%{ transform: scaleY(1);} }
+  .wave-bar { width:3px; border-radius:2px; background:#a5b4fc; animation: wave 1s infinite ease-in-out; }
+  .bubble-user .wave-bar { background: rgba(255,255,255,.85); }
+
+  .fade-in { animation: fadeIn .35s ease both; }
+  @keyframes fadeIn { from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+
+  .btn-press:active { transform: scale(0.94); }
+
+  .toast {
+    position:fixed; top:16px; left:50%; transform:translateX(-50%) translateY(-20px);
+    background:#111827; color:#fff; padding:9px 16px; border-radius:10px; font-size:13px;
+    box-shadow:0 8px 20px -6px rgba(0,0,0,.35); opacity:0; transition:all .3s; z-index:999; pointer-events:none;
+  }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body class="flex items-center justify-center py-10 px-4">
+
+<div class="flex flex-col items-center gap-5">
+  <div class="text-center">
+    <p class="text-[13px] font-semibold tracking-wide text-indigo-500 uppercase">Interaction Preview</p>
+    <h1 class="text-xl font-bold text-slate-800 mt-1">小老曾 · 理想态交互 Demo</h1>
+    <p class="text-sm text-slate-400 mt-1">纯前端模拟，非真实后端 · 点击体验完整流程</p>
+  </div>
+
+  <div class="phone">
+    <!-- 顶部标题栏 -->
+    <div class="px-5 pt-5 pb-4 bg-white/70 backdrop-blur border-b border-slate-100 flex items-center gap-3">
+      <div class="avatar avatar-bot text-white">曾</div>
+      <div class="flex-1">
+        <p class="font-semibold text-slate-800 text-[15px] leading-tight">产品老曾</p>
+        <p class="text-[12px] text-slate-400 leading-tight mt-0.5 flex items-center gap-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+          用老曾自己的声音回答你
+        </p>
+      </div>
+      <button onclick="resetDemo()" class="text-[12px] text-slate-400 hover:text-indigo-500 px-2 py-1 rounded-lg hover:bg-slate-100 transition btn-press">重置</button>
+    </div>
+
+    <!-- 聊天区 -->
+    <div id="chat" class="chat-scroll flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-gradient-to-b from-slate-50 to-white">
+      <!-- 初始欢迎消息（静态） -->
+      <div class="flex items-start gap-2 fade-in">
+        <div class="avatar avatar-bot text-white text-sm">曾</div>
+        <div class="bubble-bot px-4 py-2.5 text-[14.5px] leading-relaxed text-slate-700 max-w-[78%]">
+          你好，我是产品老曾。有啥职场上的问题，直接问我 👇 点麦克风说话，或者直接打字。
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部输入区：永久存在，三态切换（idle / recording / review） -->
+    <div class="border-t border-slate-100 bg-white px-3 pt-3 pb-4">
+
+      <!-- 录音中 提示条 -->
+      <div id="bar-recording" class="hidden items-center gap-3 bg-red-50 rounded-2xl px-4 py-3 mb-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-red-500 rec-dot"></span>
+        <span id="rec-timer" class="text-red-500 font-semibold text-sm tabular-nums">00:00</span>
+        <div class="flex-1 flex items-center gap-[3px] h-6 justify-center overflow-hidden">
+          <span class="wave-bar h-2" style="background:#f87171;animation-delay:.0s"></span>
+          <span class="wave-bar h-4" style="background:#f87171;animation-delay:.1s"></span>
+          <span class="wave-bar h-5" style="background:#f87171;animation-delay:.2s"></span>
+          <span class="wave-bar h-3" style="background:#f87171;animation-delay:.3s"></span>
+          <span class="wave-bar h-5" style="background:#f87171;animation-delay:.15s"></span>
+          <span class="wave-bar h-2" style="background:#f87171;animation-delay:.25s"></span>
+        </div>
+        <span class="text-[12px] text-red-400">正在录音…</span>
+      </div>
+
+      <!-- 录完待确认：回听/删除重录 + 转写文字可编辑 + 两种发送方式 -->
+      <div id="bar-review" class="hidden flex-col gap-2 bg-indigo-50 rounded-2xl px-3 py-2.5 mb-2">
+        <div class="flex items-center gap-2">
+          <button onclick="playPreview()" class="w-9 h-9 rounded-full bg-white shadow flex items-center justify-center text-indigo-500 btn-press shrink-0">
+            <svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 ml-0.5"><path d="M8 5.14v13.72a1 1 0 001.5.87l11-6.86a1 1 0 000-1.74l-11-6.86A1 1 0 008 5.14z"/></svg>
+          </button>
+          <div class="flex-1 flex items-center gap-[3px] h-6">
+            <span class="wave-bar h-3" style="background:#818cf8"></span>
+            <span class="wave-bar h-5" style="background:#818cf8"></span>
+            <span class="wave-bar h-2" style="background:#818cf8"></span>
+            <span class="wave-bar h-4" style="background:#818cf8"></span>
+            <span class="wave-bar h-5" style="background:#818cf8"></span>
+            <span class="wave-bar h-3" style="background:#818cf8"></span>
+            <span class="wave-bar h-2" style="background:#818cf8"></span>
+          </div>
+          <span id="review-duration" class="text-[12px] text-indigo-400 tabular-nums shrink-0">0"</span>
+          <button onclick="cancelReview()" title="删除重录" class="w-9 h-9 rounded-full bg-white shadow flex items-center justify-center text-slate-400 hover:text-red-500 btn-press shrink-0">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2"/><path d="M19 6l-1 14a1 1 0 01-1 1H7a1 1 0 01-1-1L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>
+          </button>
+        </div>
+
+        <!-- 转写中 -->
+        <div id="asr-preview-wrap" class="flex items-center gap-2 pl-1">
+          <span id="asr-preview-icon" class="text-[12px] text-indigo-400">🎧 转写中…</span>
+        </div>
+
+        <!-- 转写成功：可编辑文字 + 两个发送按钮都带文字标签，避免歧义 -->
+        <div id="asr-result-wrap" class="hidden flex-col gap-2">
+          <input id="asr-text-input" type="text"
+            class="w-full h-9 px-3 rounded-full bg-white text-[13.5px] outline-none focus:ring-2 focus:ring-indigo-200 transition"
+            placeholder="识别结果，可编辑纠错…">
+          <div class="flex items-center gap-2 justify-end">
+            <button onclick="confirmSendVoice('voice')" class="flex items-center gap-1.5 pl-3 pr-4 h-9 rounded-full bg-white text-indigo-500 text-[13px] font-medium shadow btn-press shrink-0">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/></svg>
+              发原声
+            </button>
+            <button onclick="confirmSendVoice('text')" class="flex items-center gap-1.5 pl-3 pr-4 h-9 rounded-full bg-indigo-500 text-white text-[13px] font-semibold shadow btn-press shrink-0">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+              发文字
+            </button>
+          </div>
+        </div>
+
+        <!-- 转写失败兜底：只能发语音 -->
+        <div id="asr-fail-wrap" class="hidden items-center justify-between gap-2 pl-1">
+          <span class="text-[12px] text-amber-500">⚠️ 没听清，可直接发语音</span>
+          <button onclick="confirmSendVoice('voice')" class="px-4 h-9 rounded-full bg-indigo-500 text-white text-[13px] font-semibold shadow btn-press shrink-0">发语音</button>
+        </div>
+      </div>
+
+      <!-- 常态：麦克风 + 文本框 + 发送（永远存在，不会消失） -->
+      <div id="bar-idle" class="flex items-center gap-2">
+        <button id="mic-btn" onclick="startRecording()" class="w-11 h-11 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center shrink-0 btn-press hover:bg-indigo-100 transition">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-[18px] h-[18px]"><path d="M12 15a3 3 0 003-3V6a3 3 0 10-6 0v6a3 3 0 003 3z"/><path d="M19 11a7 7 0 01-14 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <input id="text-input" type="text" placeholder="也可以打字问老曾…"
+          class="flex-1 h-11 px-4 rounded-full bg-slate-100 text-[14.5px] outline-none focus:ring-2 focus:ring-indigo-200 transition"
+          onkeydown="if(event.key==='Enter') sendText()">
+        <button onclick="sendText()" class="h-11 px-4 rounded-full bg-indigo-500 text-white text-[13.5px] font-semibold shrink-0 btn-press hover:bg-indigo-600 transition">发送</button>
+      </div>
+
+      <!-- 停止录音的"处理中"过渡态 -->
+      <div id="bar-converting" class="hidden items-center gap-2 justify-center h-11 text-[13px] text-slate-400">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="ml-1">处理中…</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-[420px] text-center text-[12px] text-slate-400 leading-relaxed">
+    这是纯前端交互模拟（无真实 ASR/RAG/TTS），用来确认「录音确认」「流式出字」「异步配音」三个体验点。<br>确认没问题后我会把这套交互接到 <code class="bg-slate-100 px-1 rounded">app_voice.py</code> 真实后端。
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const chat = document.getElementById('chat');
+const barIdle = document.getElementById('bar-idle');
+const barRecording = document.getElementById('bar-recording');
+const barReview = document.getElementById('bar-review');
+const barConverting = document.getElementById('bar-converting');
+
+let recTimerHandle = null;
+let recSeconds = 0;
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function scrollBottom() { chat.scrollTop = chat.scrollHeight + 200; }
+
+function setBar(state) {
+  barIdle.classList.toggle('hidden', state !== 'idle');
+  barIdle.classList.toggle('flex', state === 'idle');
+  barRecording.classList.toggle('hidden', state !== 'recording');
+  barRecording.classList.toggle('flex', state === 'recording');
+  barReview.classList.toggle('hidden', state !== 'review');
+  barReview.classList.toggle('flex', state === 'review');
+  if (state === 'review') resetAsrPreview();
+  barConverting.classList.toggle('hidden', state !== 'converting');
+  barConverting.classList.toggle('flex', state === 'converting');
+}
+
+// ===== 录音三态：idle -> recording -> review -> (发送 or 删除重录) -> idle =====
+function startRecording() {
+  recSeconds = 0;
+  document.getElementById('rec-timer').textContent = '00:00';
+  setBar('recording');
+  recTimerHandle = setInterval(() => {
+    recSeconds++;
+    const m = String(Math.floor(recSeconds/60)).padStart(2,'0');
+    const s = String(recSeconds%60).padStart(2,'0');
+    document.getElementById('rec-timer').textContent = `${m}:${s}`;
+    if (recSeconds >= 3) { clearInterval(recTimerHandle); stopRecording(); } // demo自动3秒停止，实际由用户点停止
+  }, 1000);
+  // 真实实现：click再点一次= 停止，这里为了demo流畅自动停
+}
+
+function stopRecording() {
+  setBar('converting');
+  setTimeout(() => {
+    document.getElementById('review-duration').textContent = recSeconds + '"';
+    setBar('review'); // 会自动触发 resetAsrPreview() 并开始转写模拟
+  }, 500); // 模拟 webm->wav 本地转换耗时
+}
+
+// ===== 停止后立刻本地转写（ASR），转写结果可编辑，默认走文字发送，也可保留原声发送 =====
+const FAKE_ASR_TEXT = "老曾我最近想跳槽但是又怕简历space不够看，怎么破？";
+
+function resetAsrPreview() {
+  document.getElementById('asr-preview-wrap').classList.remove('hidden');
+  document.getElementById('asr-result-wrap').classList.add('hidden');
+  document.getElementById('asr-result-wrap').classList.remove('flex');
+  document.getElementById('asr-fail-wrap').classList.add('hidden');
+  document.getElementById('asr-fail-wrap').classList.remove('flex');
+  document.getElementById('asr-preview-icon').textContent = '🎧 转写中…';
+
+  // 模拟转写耗时 ~600ms；demo里默认成功，可把下面 asrOk 改 false 测试失败兜底
+  setTimeout(() => {
+    const asrOk = true;
+    document.getElementById('asr-preview-wrap').classList.add('hidden');
+    if (asrOk) {
+      document.getElementById('asr-result-wrap').classList.remove('hidden');
+      document.getElementById('asr-result-wrap').classList.add('flex');
+      document.getElementById('asr-text-input').value = FAKE_ASR_TEXT;
+    } else {
+      document.getElementById('asr-fail-wrap').classList.remove('hidden');
+      document.getElementById('asr-fail-wrap').classList.add('flex');
+    }
+  }, 600);
+}
+
+function playPreview() { showToast('▶ 回听录音（demo 模拟）'); }
+
+function cancelReview() {
+  showToast('已删除，可重新录音');
+  setBar('idle');
+}
+
+// mode: 'text' = 发送识别后的文字（默认，走文字通道，最快）；'voice' = 保留原声发送（走ASR+语音通道）
+function confirmSendVoice(mode) {
+  const duration = recSeconds || 3;
+  setBar('idle');
+  if (mode === 'text') {
+    const text = (document.getElementById('asr-text-input').value || FAKE_ASR_TEXT).trim();
+    pushUserVoiceTextBubble(text, duration);
+  } else {
+    pushUserVoiceBubble(duration);
+  }
+}
+
+// ===== 文本提问 =====
+function sendText() {
+  const input = document.getElementById('text-input');
+  const val = input.value.trim();
+  if (!val) return;
+  input.value = '';
+  pushUserTextBubble(val);
+}
+
+// ===== 消息渲染 =====
+function pushUserTextBubble(text) {
+  const row = document.createElement('div');
+  row.className = 'flex items-start gap-2 justify-end fade-in';
+  row.innerHTML = `
+    <div class="bubble-user px-4 py-2.5 text-[14.5px] leading-relaxed max-w-[78%]">${escapeHtml(text)}</div>
+    <div class="avatar avatar-user text-white text-sm">我</div>`;
+  chat.appendChild(row);
+  scrollBottom();
+  runAssistantFlow(text);
+}
+
+function pushUserVoiceBubble(duration) {
+  const row = document.createElement('div');
+  row.className = 'flex items-start gap-2 justify-end fade-in';
+  row.innerHTML = `
+    <div class="bubble-user px-4 py-2.5 max-w-[78%] flex flex-col gap-1.5">
+      <div class="flex items-center gap-[3px] h-5 min-w-[90px]">
+        ${[3,5,2,4,5,3,2,4].map((h,i)=>`<span class="wave-bar h-${h}" style="animation-delay:${i*0.08}s"></span>`).join('')}
+        <span class="text-[12px] ml-2 opacity-80">${duration}"</span>
+      </div>
+    </div>
+    <div class="avatar avatar-user text-white text-sm">我</div>`;
+  chat.appendChild(row);
+  scrollBottom();
+
+  // 语音条下方紧跟"识别中" -> 替换为识别结果（模拟真实转文字过程，立刻给反馈）
+  const asrRow = document.createElement('div');
+  asrRow.className = 'flex items-start gap-2 justify-end fade-in';
+  asrRow.innerHTML = `<div class="text-[12px] text-slate-400 italic mr-11">🎧 识别中…</div>`;
+  chat.appendChild(asrRow);
+  scrollBottom();
+
+  const fakeQuestion = "老曾我最近想跳槽但是又怕简历space不够看，怎么破？";
+  setTimeout(() => {
+    asrRow.innerHTML = `<div class="text-[12px] text-slate-400 mr-11">📝 ${fakeQuestion}</div>`;
+    runAssistantFlow(fakeQuestion, /*isVoice=*/true);
+  }, 550);
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// 文字通道发出的语音消息：气泡里保留一条"迷你波形"标记来源是录音，但内容是可编辑后的文字，
+// 已经在发送前完成转写，无需再等"识别中"，直接进入回复（更快，且默认不追加配音回复）
+function pushUserVoiceTextBubble(text, duration) {
+  const row = document.createElement('div');
+  row.className = 'flex items-start gap-2 justify-end fade-in';
+  row.innerHTML = `
+    <div class="bubble-user px-4 py-2.5 text-[14.5px] leading-relaxed max-w-[78%]">
+      <div class="flex items-center gap-1 mb-1 opacity-70 text-[11px]">
+        <span>🎤</span><span>${duration}"语音转文字</span>
+      </div>
+      ${escapeHtml(text)}
+    </div>
+    <div class="avatar avatar-user text-white text-sm">我</div>`;
+  chat.appendChild(row);
+  scrollBottom();
+  runAssistantFlow(text, /*isVoice=*/false);
+}
+
+// ===== 助手回复：thinking -> 流式打字 -> 来源 -> (语音提问时)异步配音 =====
+const FAKE_ANSWER = "你想想看，简历不是越花越好，是越'对得上岗位'越好。我当年带团队面过上百份简历，筛的时候第一眼看的是你有没有把结果量化——'负责XX项目'这种话我直接跳过，我要看的是'把留存从18%做到27%，带来XX增量'。你先把过去三个项目的数据抠出来，哪怕是估算的，也比空话强十倍。";
+
+function runAssistantFlow(question, isVoice=false) {
+  const row = document.createElement('div');
+  row.className = 'flex items-start gap-2 fade-in';
+  row.innerHTML = `<div class="avatar avatar-bot text-white text-sm">曾</div><div id="bot-bubble-${Date.now()}" class="bubble-bot px-4 py-2.5 text-[14.5px] leading-relaxed text-slate-700 max-w-[78%]"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
+  chat.appendChild(row);
+  const bubble = row.querySelector('div:last-child');
+  scrollBottom();
+
+  // ① 立即显示"正在想"三点动画（不是文字占位，视觉更轻）
+  setTimeout(() => {
+    // ② 开始流式打字（模拟 token-by-token，第一批字很快出现，解决"体感慢"问题）
+    bubble.innerHTML = '<span class="cursor-blink"></span>';
+    typeWriter(bubble, FAKE_ANSWER, () => {
+      // ③ 打完字，去掉光标，追加来源小气泡
+      bubble.innerHTML = FAKE_ANSWER;
+      appendSourceChip();
+      if (isVoice) appendVoiceReply();
+    });
+  }, 500);
+}
+
+function typeWriter(el, text, onDone) {
+  let i = 0;
+  const speed = 28; // ms/字，模拟流式吐字速度
+  function step() {
+    i++;
+    el.innerHTML = escapeHtml(text.slice(0, i)) + '<span class="cursor-blink"></span>';
+    scrollBottom();
+    if (i < text.length) setTimeout(step, speed);
+    else onDone();
+  }
+  step();
+}
+
+function appendSourceChip() {
+  const row = document.createElement('div');
+  row.className = 'flex items-start gap-2 fade-in';
+  row.innerHTML = `<div class="avatar" style="visibility:hidden"></div>
+    <div class="bubble-src px-3 py-1.5 text-[11.5px] text-slate-400 max-w-[78%]">
+      参考 · <a class="text-indigo-400 hover:underline" href="#">跳槽前必须想清楚的3件事</a> · <a class="text-indigo-400 hover:underline" href="#">简历筛选官的真实视角</a>
+    </div>`;
+  chat.appendChild(row);
+  scrollBottom();
+}
+
+function appendVoiceReply() {
+  // ④ 配音是异步的：先给一个"配音中"小胶囊，不阻塞文字已读，好了再原地替换成播放器
+  const row = document.createElement('div');
+  row.className = 'flex items-start gap-2 fade-in';
+  row.innerHTML = `<div class="avatar" style="visibility:hidden"></div>
+    <div id="tts-chip" class="bubble-src px-3 py-2 text-[12.5px] text-slate-400 flex items-center gap-2">
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span>🔊 配音中…</span>
+    </div>`;
+  chat.appendChild(row);
+  scrollBottom();
+  setTimeout(() => {
+    const chip = document.getElementById('tts-chip');
+    chip.className = 'bubble-bot px-3 py-2 flex items-center gap-2';
+    chip.innerHTML = `<button onclick="showToast('▶ 播放老曾语音回复（demo 模拟）')" class="w-8 h-8 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center btn-press">▶</button>
+      <div class="flex items-center gap-[3px] h-5">
+        ${[3,5,2,4,3].map(h=>`<span class="wave-bar h-${h}" style="background:#a5b4fc"></span>`).join('')}
+      </div>
+      <span class="text-[11px] text-slate-400">0:08</span>`;
+    scrollBottom();
+  }, 1800); // 模拟TTS合成耗时，但文字早已可读，用户不是"干等"
+}
+
+function resetDemo() {
+  chat.innerHTML = `<div class="flex items-start gap-2 fade-in">
+        <div class="avatar avatar-bot text-white text-sm">曾</div>
+        <div class="bubble-bot px-4 py-2.5 text-[14.5px] leading-relaxed text-slate-700 max-w-[78%]">
+          你好，我是产品老曾。有啥职场上的问题，直接问我 👇 点麦克风说话，或者直接打字。
+        </div>
+      </div>`;
+  setBar('idle');
+}
+</script>
+</body>
+</html>
