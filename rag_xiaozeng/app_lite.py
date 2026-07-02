@@ -23,7 +23,11 @@ from pathlib import Path
 
 # === 配置 ===
 PROJECT_DIR = Path(__file__).parent.parent
-DATA_FILE = PROJECT_DIR / "categorized.json"
+# Docker 部署时 categorized.json 可能放在 /app/ 下（和 app_lite.py 同级），
+# 也可能放在项目根目录（本地开发时）。优先用本地同级，找不到再回退到上级。
+DATA_FILE = Path(__file__).parent / "categorized.json"
+if not DATA_FILE.exists():
+    DATA_FILE = PROJECT_DIR / "categorized.json"
 CHROMA_DIR = Path(__file__).parent / "chroma_db"
 
 # LLM 配置
