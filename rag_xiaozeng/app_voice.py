@@ -21,7 +21,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-import gradio as gr
+# Gradio 是可选依赖：纯 FastAPI 后端（server.py）只需要 transcribe/synthesize/strip_markdown
+# 等不依赖 gradio 的函数；只有旧版 app_voice.py 的 Gradio UI 入口才需要它。
+try:
+    import gradio as gr
+except ImportError:
+    gr = None
 import dashscope
 
 # 复用文字版的 RAG 大脑（同目录）
